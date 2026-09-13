@@ -1,0 +1,1 @@
+-- Intentionally inserts no rows.

@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/core/tsconfig.build.json" },
+    { "path": "../../packages/git/tsconfig.build.json" },
+    { "path": "../../packages/prisma/tsconfig.build.json" }
+  ]
+}

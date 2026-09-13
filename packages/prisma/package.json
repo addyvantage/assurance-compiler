@@ -1,0 +1,25 @@
+{
+  "name": "@assurance-compiler/prisma",
+  "version": "0.1.0",
+  "description": "Detects Prisma database-schema changes and verifies Prisma migrations against a populated PostgreSQL baseline.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@assurance-compiler/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@assurance-compiler/core": "workspace:*",
+    "@assurance-compiler/git": "workspace:*",
+    "execa": "^10.0.1"
+  }
+}

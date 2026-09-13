@@ -1,0 +1,23 @@
+{
+  "name": "@assurance-compiler/cli",
+  "version": "0.1.0",
+  "description": "The assure command-line interface.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "assure": "./dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@assurance-compiler/core": "workspace:*",
+    "@assurance-compiler/git": "workspace:*",
+    "@assurance-compiler/prisma": "workspace:*",
+    "commander": "^15.0.0",
+    "picocolors": "^1.1.1"
+  }
+}

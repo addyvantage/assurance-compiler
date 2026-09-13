@@ -1,0 +1,19 @@
+{
+  // Whole-workspace type checking for sources, tests and tooling.
+  // Workspace packages resolve to their TypeScript sources through the custom
+  // export condition, so type checking never depends on a prior build.
+  // Emitting is handled separately by tsconfig.build.json.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "customConditions": ["@assurance-compiler/source"]
+  },
+  "include": [
+    "apps/*/src",
+    "apps/*/test",
+    "packages/*/src",
+    "packages/*/test",
+    "test",
+    "vitest.config.ts"
+  ]
+}

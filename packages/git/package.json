@@ -1,0 +1,24 @@
+{
+  "name": "@assurance-compiler/git",
+  "version": "0.1.0",
+  "description": "Reads the files changed between two revisions by invoking the Git executable.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@assurance-compiler/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@assurance-compiler/core": "workspace:*",
+    "execa": "^10.0.1"
+  }
+}

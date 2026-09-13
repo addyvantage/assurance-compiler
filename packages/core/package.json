@@ -1,0 +1,20 @@
+{
+  "name": "@assurance-compiler/core",
+  "version": "0.1.0",
+  "description": "Domain model for change surfaces, assurance requirements, evidence and assurance plans.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@assurance-compiler/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  }
+}
