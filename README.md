@@ -162,8 +162,13 @@ any `migrationFailure` and the cleanup result.
 reports its sha256. Stage statuses (`pending`, `running`, `succeeded`, `failed`, `cancelled`)
 describe execution; only requirement states describe assurance.
 
-Evidence never contains credentials, row values, source files or SQL. Database messages are kept
-only for SQLSTATE classes whose messages name schema objects. Other messages are withheld.
+Evidence never contains credentials, row values, source files or SQL. A database message is kept
+only when it has the shape of one of PostgreSQL's own constraint or catalog messages, whose only
+variable parts are schema identifiers of at most 63 characters (for example `column "age" of
+relation "User" contains null values`). Every other message is withheld with only its SQLSTATE,
+including messages a migration raises itself with `RAISE … USING ERRCODE`, and syntax errors,
+which quote SQL. Schema identifiers are retained as named: a migration that derives table or
+column names from data puts that data into evidence.
 
 ### Supported scope
 
@@ -294,39 +299,54 @@ ASSURE_TEST_PRISMA_NODE_MODULES=/path/to/node_modules pnpm test:integration
 
 ### macOS (Apple Silicon) setup and verification
 
-Verified so far on Windows 11 only. On a Mac, from a fresh clone:
+Verified on macOS 26.5.1 (Darwin 25.5.0, arm64) with Node.js 24.5.0, pnpm 9.15.0, Git 2.53.0,
+PostgreSQL 16.14 (Homebrew) and Prisma 6.19.3: every check below, 203 unit tests, 16 integration
+tests, and the built-CLI cases below. The same suite was earlier reported on Windows 11 with
+different tool versions; that was not a controlled comparison, and Windows has not been re-run
+for changes made since.
 
 ```sh
-brew install node@22 pnpm postgresql@16
-export PATH="$(brew --prefix node@22)/bin:$(brew --prefix postgresql@16)/bin:$PATH"   # both are keg-only
-git config --global user.name >/dev/null || git config --global user.name "Your Name"
-git config --global user.email >/dev/null || git config --global user.email "you@example.com"
+brew install node@24 pnpm postgresql@16
+# node@24 and postgresql@16 are keg-only. Put them first for this shell; do not relink globally.
+# If a shell hook (nvm, asdf) selects another Node, `node -v` must still print 22.12 or newer:
+# pnpm runs on whichever `node` is first on PATH, and so do the tools the tests start.
+export PATH="$(brew --prefix node@24)/bin:$(brew --prefix postgresql@16)/bin:$PATH"
+node -v && pnpm -v   # pnpm must print 9.15.0, the version package.json declares
 
 git clone https://github.com/addyvantage/assurance-compiler && cd assurance-compiler
 pnpm install --frozen-lockfile          # never copy node_modules from another platform
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build
 
+# Prisma for the integration tests lives outside the repository; it is not a project dependency.
 mkdir -p ~/assure-tooling && npm install --prefix ~/assure-tooling prisma@6.19.3
 ASSURE_TEST_PRISMA_NODE_MODULES=~/assure-tooling/node_modules pnpm test:integration
 ```
 
-Then run the real failing and passing cases with the built CLI:
+Then run the real failing and passing cases with the built CLI. Each demo repository gets a
+local Git identity; nothing global is changed.
 
 ```sh
 REPO="$PWD"
 for case in unsafe corrected; do
-  DEMO="$(mktemp -d)/$case" && mkdir -p "$DEMO" && cd "$DEMO"
+  DEMO="$(mktemp -d)/$case" && mkdir -p "$DEMO" && cd "$DEMO" || break
   git init -q -b main
+  git config user.name "Assure Demo" && git config user.email "demo@assurance.invalid"
   cp -R "$REPO/fixtures/prisma-migration-$case/base/." . && git add -A && git commit -qm "Baseline"
   git switch -qc feature && git rm -rq . && cp -R "$REPO/fixtures/prisma-migration-$case/head/." .
   git add -A && git commit -qm "Add User.age"
   ln -s ~/assure-tooling/node_modules node_modules && echo node_modules >> .git/info/exclude
-  node "$REPO/apps/cli/dist/main.js" check main --seed-sql prisma/seed.sql --expect-table public.User
+  node "$REPO/apps/cli/dist/main.js" check main --seed-sql prisma/seed.sql --expect-table public.User \
+    --evidence-out "$DEMO/evidence.json"
   echo "$case exited $?"
+  # Cleanup is verified per invocation: the run ID names the only directory this run owned.
+  RUN_ID=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).verification.runId)' "$DEMO/evidence.json")
+  [ -n "$RUN_ID" ] || { echo "no evidence file, nothing to verify"; cd "$REPO"; continue; }
+  ls "${TMPDIR:-/tmp}" | grep "assure-run-${RUN_ID:0:8}" && echo "LEFTOVER" || echo "run $RUN_ID cleaned up"
   cd "$REPO"
 done
 ```
 
 Expected: `unsafe` prints `Verdict: FAILED` with SQLSTATE 23502 and exits `1`. `corrected` prints
-`Verdict: COMPLETE` and exits `0`. Afterwards, `ls "$TMPDIR" | grep assure-run-` should print
-nothing.
+`Verdict: COMPLETE` and exits `0`. Each run reports `Cleanup succeeded` and leaves no directory
+named after its run ID. Other `assure-run-*` directories belong to other invocations; a forced
+kill or host crash can leave one behind, and only its owner should remove it.

@@ -180,16 +180,7 @@ export async function checkPopulation(
       run,
       signal,
     );
-    if (result.exitCode !== 0) {
-      const error = result.cancelled || result.timedOut ? undefined : parsePsqlError(result.output);
-      return error === undefined
-        ? toolFailure('psql', result, [server.password])
-        : {
-            ok: false,
-            cancelled: false,
-            detail: `Could not read ${table}: ${describeDatabaseError(error)}.`,
-          };
-    }
+    if (result.exitCode !== 0) return psqlFailure(result, server, `read ${table}`);
     observed.push({ table, populated: result.output.trim() === 't' });
   }
   const empty = observed.filter((entry) => !entry.populated).map((entry) => entry.table);
@@ -215,7 +206,7 @@ export async function appliedMigrations(
     run,
     signal,
   );
-  if (result.exitCode !== 0) return toolFailure('psql', result, [server.password]);
+  if (result.exitCode !== 0) return psqlFailure(result, server, 'read applied migrations');
   return {
     ok: true,
     value: result.output
@@ -243,6 +234,21 @@ export async function stopServer(
     timeoutMs: 60_000,
   });
   return result.exitCode === 0 || !(await exists(pidFile));
+}
+
+/**
+ * Explains a failed query on the owner database, which runs after repository SQL. A database
+ * error is reduced to what evidence may contain; psql's raw output is never kept in that case.
+ */
+function psqlFailure(result: ToolResult, server: PostgresServer, action: string): Step<never> {
+  const error = result.cancelled || result.timedOut ? undefined : parsePsqlError(result.output);
+  return error === undefined
+    ? toolFailure('psql', result, [server.password])
+    : {
+        ok: false,
+        cancelled: false,
+        detail: `Could not ${action}: ${describeDatabaseError(error)}.`,
+      };
 }
 
 function owner(server: PostgresServer): Connection {

@@ -143,6 +143,7 @@ function findRejection(
   if (subject.candidateMigrations.length === 0) {
     return 'there is no candidate migration to verify.';
   }
+  if (subject.expectedTables.length === 0) return 'there is no expected table to check.';
   if (
     observation.runId === '' ||
     observation.provider.id === '' ||

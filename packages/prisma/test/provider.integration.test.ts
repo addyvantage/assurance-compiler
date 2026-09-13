@@ -118,6 +118,26 @@ describe('verifyMigrationExecution with real PostgreSQL and Prisma', () => {
     await expectRunResourcesRemoved(observation);
   });
 
+  it('withholds a message the migration raised with row values, even with a violation SQLSTATE', async () => {
+    const { root, inputs } = await prepare('prisma-migration-corrected', (repository) => {
+      repository.write(
+        'prisma/migrations/20260914_raise/migration.sql',
+        `DO $$ BEGIN RAISE EXCEPTION 'cannot migrate: %', (SELECT string_agg("email", ', ') FROM "User") USING ERRCODE = '23505'; END $$;\n`,
+      );
+      repository.commit('migration that raises with row values');
+    });
+
+    const observation = await verifyMigrationExecution(root, inputs);
+
+    expect(observation.migrationFailure).toEqual({
+      migration: '20260914_raise',
+      sqlState: '23505',
+    });
+    expect(JSON.stringify(observation)).not.toContain('@example.com');
+    expect(assessMigrationExecution(inputs.subject, observation).state).toBe('FAILED');
+    await expectRunResourcesRemoved(observation);
+  });
+
   it('classifies a Prisma connection failure as operational rather than a violation', async () => {
     const { root, inputs } = await prepare('prisma-migration-unsafe');
     const intercept: ToolRunner = async (request) =>

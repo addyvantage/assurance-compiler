@@ -5,12 +5,32 @@ export interface DatabaseError {
 }
 
 /**
- * SQLSTATE classes whose PostgreSQL messages name schema objects but never row values:
- * integrity constraint violations (23) and invalid statements (42). Other messages, such as
- * data exceptions quoting the offending input, are dropped. DETAIL lines are never kept,
- * because they routinely contain row values.
+ * PostgreSQL's own messages whose only variable parts are quoted schema identifiers, each at
+ * most 63 characters as PostgreSQL limits them. A message is kept only when it has one of these
+ * shapes. Any other text is dropped, including messages the migration itself raises
+ * (`RAISE … USING ERRCODE`), which can carry any SQLSTATE and any row values, and syntax
+ * errors, which quote SQL. DETAIL lines are never kept. Identifiers themselves are retained:
+ * a migration that builds them from data puts that data into schema names, and into evidence.
  */
-const IDENTIFIER_ONLY_CLASSES = new Set(['23', '42']);
+const IDENTIFIER = '"[^"]{1,63}"';
+const KNOWN_MESSAGES = [
+  'column {} of relation {} contains null values',
+  'null value in column {} of relation {} violates not-null constraint',
+  'duplicate key value violates unique constraint {}',
+  'could not create unique index {}',
+  'check constraint {} of relation {} is violated by some row',
+  'new row for relation {} violates check constraint {}',
+  'insert or update on table {} violates foreign key constraint {}',
+  'update or delete on table {} violates foreign key constraint {} on table {}',
+  'relation {} does not exist',
+  'relation {} already exists',
+  'column {} does not exist',
+  'column {} of relation {} does not exist',
+  'column {} of relation {} already exists',
+  'constraint {} of relation {} does not exist',
+  'type {} does not exist',
+  'type {} already exists',
+].map((template) => new RegExp(`^${template.replaceAll('{}', IDENTIFIER)}$`));
 const MAX_DETAIL_LENGTH = 300;
 
 /** The failure described by `prisma migrate deploy` output, when it names one. */
@@ -69,7 +89,7 @@ export function firstErrorLine(output: string, secrets: readonly string[]): stri
 }
 
 function databaseError(sqlState: string, message: string | undefined): DatabaseError {
-  return message !== undefined && IDENTIFIER_ONLY_CLASSES.has(sqlState.slice(0, 2))
+  return message !== undefined && KNOWN_MESSAGES.some((known) => known.test(message))
     ? { sqlState, message: bound(message) }
     : { sqlState };
 }
