@@ -29,6 +29,11 @@ export interface VerificationOptions {
   readonly signal?: AbortSignal;
   /** Replaces process execution. Used to exercise timeouts and cleanup failures in tests. */
   readonly runTool?: ToolRunner;
+  /**
+   * Receives every stage transition as it happens: once when a stage starts running and once
+   * when it ends. The final observation remains the only authority; this is for progress display.
+   */
+  readonly onStage?: (record: StageRecord) => void;
 }
 
 /** Thrown when the provider itself breaks. It is never evidence about the migrations. */
@@ -84,7 +89,7 @@ export async function verifyMigrationExecution(
   };
 
   try {
-    await runStages(root, inputs, state, run, options.signal);
+    await runStages(root, inputs, state, run, options.signal, options.onStage);
   } catch (error) {
     throw new VerificationRunError(error, await cleanUp(state, run));
   }
@@ -109,9 +114,10 @@ async function runStages(
   state: RunState,
   run: ToolRunner,
   signal: AbortSignal | undefined,
+  onStage: VerificationOptions['onStage'],
 ): Promise<void> {
   const stage = <T>(name: MigrationExecutionStage, command: string, work: () => Promise<Step<T>>) =>
-    runStage(state, name, command, signal, work);
+    runStage(state, name, command, signal, work, onStage);
 
   const ready = await stage('environment', 'initdb; pg_ctl start', () =>
     prepareEnvironment(root, inputs, state, run, signal),
@@ -164,20 +170,21 @@ async function runStage<T>(
   command: string,
   signal: AbortSignal | undefined,
   work: () => Promise<Step<T>>,
+  onStage: VerificationOptions['onStage'],
 ): Promise<T | undefined> {
+  const record = (entry: StageRecord) => {
+    state.records.set(name, entry);
+    onStage?.(entry);
+  };
   if (signal?.aborted === true) {
-    state.records.set(name, {
-      name,
-      status: 'cancelled',
-      detail: 'Cancelled before the stage started.',
-    });
+    record({ name, status: 'cancelled', detail: 'Cancelled before the stage started.' });
     return undefined;
   }
   const startedAt = new Date();
-  state.records.set(name, { name, status: 'running', startedAt: startedAt.toISOString(), command });
+  record({ name, status: 'running', startedAt: startedAt.toISOString(), command });
   const step = await work();
   const status = step.ok ? 'succeeded' : step.cancelled ? 'cancelled' : 'failed';
-  state.records.set(name, {
+  record({
     name,
     status,
     startedAt: startedAt.toISOString(),

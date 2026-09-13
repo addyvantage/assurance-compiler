@@ -8,5 +8,9 @@ export {
   type InputResolution,
   type MigrationInputs,
 } from './migration-execution/inputs.js';
-export { VerificationRunError, verifyMigrationExecution } from './migration-execution/provider.js';
+export {
+  VerificationRunError,
+  verifyMigrationExecution,
+  type VerificationOptions,
+} from './migration-execution/provider.js';
 export type { ToolRunner } from './migration-execution/run-tool.js';

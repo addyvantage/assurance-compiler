@@ -17,7 +17,10 @@ export default defineConfig({
   resolve: {
     // Tests exercise workspace packages from source so they never depend on a prior build.
     alias: [
-      { find: /^@assurance-compiler\/(core|git|prisma)$/, replacement: workspacePackageSource },
+      {
+        find: /^@assurance-compiler\/(core|git|prisma|sync)$/,
+        replacement: workspacePackageSource,
+      },
     ],
   },
   test: {

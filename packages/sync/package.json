@@ -1,0 +1,23 @@
+{
+  "name": "@assurance-compiler/sync",
+  "version": "0.1.0",
+  "description": "The versioned cloud payload: what a linked CLI may report about a run, and nothing else.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@assurance-compiler/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@assurance-compiler/core": "workspace:*"
+  }
+}

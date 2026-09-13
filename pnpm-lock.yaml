@@ -74,6 +74,12 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1
 
+  packages/sync:
+    dependencies:
+      '@assurance-compiler/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@cacheable/memory@2.2.0':

@@ -41,6 +41,7 @@ export {
   type MigrationFailure,
   type MigrationIdentity,
   type StageRecord,
+  type StageStatus,
 } from './evidence/migration-execution.js';
 
 export { inferRequirements, requirementsBySurface } from './planner/inference.js';
