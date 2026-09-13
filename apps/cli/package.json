@@ -17,6 +17,8 @@
     "@assurance-compiler/core": "workspace:*",
     "@assurance-compiler/git": "workspace:*",
     "@assurance-compiler/prisma": "workspace:*",
+    "@assurance-compiler/sync": "workspace:*",
+    "@napi-rs/keyring": "2.0.0",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1"
   }

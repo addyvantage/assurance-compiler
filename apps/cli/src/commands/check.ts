@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import {
   assessMigrationExecution,
@@ -8,12 +8,15 @@ import {
   withAssessment,
   type AssurancePlan,
   type MigrationExecutionObservation,
+  type StageRecord,
   type Verdict,
 } from '@assurance-compiler/core';
 import { findRepositoryRoot, hasUncommittedChanges, readChangeSet } from '@assurance-compiler/git';
 import { resolveMigrationInputs, verifyMigrationExecution } from '@assurance-compiler/prisma';
 import { detectors } from '../detectors.js';
+import { finishSync, startSync, type SyncOutcome, type SyncSession } from '../cloud/sync.js';
 import { CheckExitCode } from '../exit-codes.js';
+import { readVersion } from '../version.js';
 import type { CliEnvironment } from '../io.js';
 import { renderCheckText } from '../output/check-text.js';
 import { CliError, renderError } from '../output/error-text.js';
@@ -35,6 +38,9 @@ export interface CheckRequest {
   readonly evidenceOut: string | undefined;
   readonly json: boolean;
   readonly debug: boolean;
+  /** Report progress and the result to the linked workspace. Never affects the exit code. */
+  readonly sync?: boolean;
+  readonly server?: string | undefined;
 }
 
 export interface EvidenceArtifact {
@@ -54,30 +60,67 @@ export async function runCheck(
       readChangeSet(root, request.base),
       hasUncommittedChanges(root),
     ]);
+    const startedAt = new Date();
+    const runId = randomUUID();
+    const cliVersion = readVersion();
+    let sync: SyncSession | undefined;
+    if (request.sync === true) {
+      const started = await startSync(
+        root,
+        runId,
+        {
+          requestedBase: request.base,
+          baseCommit: changeSet.base.commit,
+          headCommit: changeSet.head.commit,
+          mergeBase: changeSet.mergeBase,
+        },
+        cliVersion,
+        startedAt,
+        request.server,
+      );
+      if (typeof started === 'string') {
+        stderr.write(`note: not synced: ${started}\n`);
+      } else {
+        sync = started;
+      }
+    }
     const { plan, verification } = await assess(
       buildAssurancePlan(changeSet, detectors),
       root,
       request.verification,
       environment.signal,
+      { runId, onStage: sync?.onStage },
     );
     const document = toCheckDocument(plan, verification);
 
     let artifact: EvidenceArtifact | undefined;
     let artifactError: unknown;
+    const evidenceContent = `${JSON.stringify(document, null, 2)}\n`;
     if (request.evidenceOut !== undefined) {
-      artifact = await writeEvidence(
-        request.evidenceOut,
-        `${JSON.stringify(document, null, 2)}\n`,
-      ).catch((error: unknown) => {
-        artifactError = error;
-        return undefined;
+      artifact = await writeEvidence(request.evidenceOut, evidenceContent).catch(
+        (error: unknown) => {
+          artifactError = error;
+          return undefined;
+        },
+      );
+    }
+
+    // The local result is complete at this point; synchronization can only add to the output.
+    let synced: SyncOutcome | undefined;
+    if (sync !== undefined) {
+      synced = await finishSync(sync, document, {
+        cliVersion,
+        startedAt,
+        ...(artifact === undefined ? {} : { localArtifact: evidenceContent }),
       });
     }
 
     if (request.json) {
-      stdout.write(
-        `${JSON.stringify(artifact === undefined ? document : { ...document, artifact }, null, 2)}\n`,
-      );
+      const extras = {
+        ...(artifact === undefined ? {} : { artifact }),
+        ...(synced === undefined ? {} : { sync: synced }),
+      };
+      stdout.write(`${JSON.stringify({ ...document, ...extras }, null, 2)}\n`);
       if (uncommittedChanges)
         stderr.write('note: uncommitted changes are not included in this check\n');
     } else {
@@ -88,6 +131,16 @@ export async function runCheck(
           { theme, width: layoutWidth(stdout.columns) },
         ),
       );
+      if (synced !== undefined) {
+        stdout.write(
+          synced.status === 'reported'
+            ? `${theme.muted('Synced'.padEnd(11))}${synced.url}\n`
+            : `${theme.muted('Synced'.padEnd(11))}not delivered; run \`assure sync\` to retry. ${synced.url}\n`,
+        );
+      }
+    }
+    if (synced !== undefined) {
+      for (const problem of synced.problems) stderr.write(`note: sync: ${problem}\n`);
     }
 
     if (artifactError !== undefined) {
@@ -111,6 +164,7 @@ async function assess(
   root: string,
   config: MigrationVerificationConfig | undefined,
   signal: AbortSignal | undefined,
+  progress: { runId: string; onStage: ((record: StageRecord) => void) | undefined },
 ): Promise<{ plan: AssurancePlan; verification: MigrationExecutionObservation | null }> {
   const required = plan.requirements.map((instance) => instance.requirement).includes(REQUIREMENT);
   if (!required || config === undefined) return { plan, verification: null };
@@ -126,11 +180,11 @@ async function assess(
     return { plan: withAssessment(plan, REQUIREMENT, assessment), verification: null };
   }
 
-  const observation = await verifyMigrationExecution(
-    root,
-    resolution.inputs,
-    signal === undefined ? {} : { signal },
-  );
+  const observation = await verifyMigrationExecution(root, resolution.inputs, {
+    ...(signal === undefined ? {} : { signal }),
+    ...(progress.onStage === undefined ? {} : { onStage: progress.onStage }),
+    runId: progress.runId,
+  });
   const assessment = assessMigrationExecution(resolution.inputs.subject, observation);
   return { plan: withAssessment(plan, REQUIREMENT, assessment), verification: observation };
 }

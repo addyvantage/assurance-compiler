@@ -9,9 +9,12 @@ const workspacePackageSource = fileURLToPath(
 );
 const emptyGitConfig = fileURLToPath(new URL('./test/support/empty.gitconfig', import.meta.url));
 const INTEGRATION_TESTS = [
-  'apps/*/test/**/*.integration.test.ts',
+  'apps/cli/test/**/*.integration.test.ts',
   'packages/*/test/**/*.integration.test.ts',
 ];
+const WEB_TESTS = ['apps/web/test/**/*.test.ts'];
+const BROWSER_TESTS = ['apps/web/test/browser/**'];
+const webRoot = fileURLToPath(new URL('./apps/web/', import.meta.url));
 
 export default defineConfig({
   resolve: {
@@ -40,7 +43,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['apps/*/test/**/*.test.ts', 'packages/*/test/**/*.test.ts'],
+          include: ['apps/cli/test/**/*.test.ts', 'packages/*/test/**/*.test.ts'],
           exclude: [...configDefaults.exclude, ...INTEGRATION_TESTS],
           // Several tests create real Git repositories, which is slow on some platforms.
           testTimeout: 30_000,
@@ -54,6 +57,19 @@ export default defineConfig({
           // Each test creates and removes a real PostgreSQL cluster.
           testTimeout: 300_000,
           hookTimeout: 60_000,
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        // Route handlers exercised as functions against the local development database.
+        resolve: { alias: [{ find: /^@\/(.*)$/, replacement: `${webRoot}$1` }] },
+        test: {
+          name: 'web',
+          include: WEB_TESTS,
+          exclude: [...configDefaults.exclude, ...BROWSER_TESTS],
+          setupFiles: ['./apps/web/test/support/env.ts'],
+          testTimeout: 30_000,
           fileParallelism: false,
         },
       },

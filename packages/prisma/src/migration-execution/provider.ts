@@ -34,6 +34,8 @@ export interface VerificationOptions {
    * when it ends. The final observation remains the only authority; this is for progress display.
    */
   readonly onStage?: (record: StageRecord) => void;
+  /** Identifies the run in the observation. Generated when not given. */
+  readonly runId?: string;
 }
 
 /** Thrown when the provider itself breaks. It is never evidence about the migrations. */
@@ -80,7 +82,7 @@ export async function verifyMigrationExecution(
   options: VerificationOptions = {},
 ): Promise<MigrationExecutionObservation> {
   const run = options.runTool ?? runTool;
-  const runId = randomUUID();
+  const runId = options.runId ?? randomUUID();
   const state: RunState = {
     workdir: await mkdtemp(join(tmpdir(), `assure-run-${runId.slice(0, 8)}-`)),
     records: new Map(MIGRATION_EXECUTION_STAGES.map((name) => [name, { name, status: 'pending' }])),

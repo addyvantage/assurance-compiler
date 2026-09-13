@@ -7,6 +7,8 @@ import {
 } from '@assurance-compiler/prisma';
 import { Command, CommanderError, InvalidArgumentError } from 'commander';
 import { runCheck, type MigrationVerificationConfig } from './commands/check.js';
+import { runLink, runLogin, runLogout, runSync } from './commands/cloud.js';
+import { DEFAULT_SERVER } from './cloud/config.js';
 import { runDiff } from './commands/diff.js';
 import { ExitCode } from './exit-codes.js';
 import type { CliEnvironment } from './io.js';
@@ -22,6 +24,12 @@ interface CheckOptions extends BaseOptions {
   readonly seedSql?: string;
   readonly expectTable: readonly string[];
   readonly evidenceOut?: string;
+  readonly sync?: boolean;
+  readonly server?: string;
+}
+
+interface ServerOptions {
+  readonly server: string;
 }
 
 /**
@@ -102,6 +110,12 @@ function createProgram(environment: CliEnvironment, outcome: { exitCode: number 
       'write the result as a JSON evidence file (never overwrites)',
       onlyOnce('--evidence-out'),
     )
+    .option('--sync', 'report progress and the result to the linked workspace')
+    .option(
+      '--server <url>',
+      'control plane to report to (default: the linked server)',
+      onlyOnce('--server'),
+    )
     .addHelpText(
       'after',
       [
@@ -110,6 +124,9 @@ function createProgram(environment: CliEnvironment, outcome: { exitCode: number 
         'temporary PostgreSQL cluster created by this run. Uncommitted changes are not included.',
         '',
         'Exit codes: 0 complete, 1 failed, 2 invalid usage, 3 incomplete or not verified.',
+        '',
+        'With --sync, stage progress and an allowlisted report go to the repository linked with',
+        '`assure link`. A failed upload never changes the local result or the exit code.',
       ].join('\n'),
     )
     .action(async (positionalBase: string | undefined, options: CheckOptions, command: Command) => {
@@ -129,9 +146,43 @@ function createProgram(environment: CliEnvironment, outcome: { exitCode: number 
           evidenceOut,
           json: options.json === true,
           debug: options.debug === true,
+          sync: options.sync === true,
+          server: options.server,
         },
         environment,
       );
+    });
+
+  program
+    .command('login')
+    .description('Authorize this machine with the web control plane through a browser.')
+    .option('--server <url>', 'control plane URL', DEFAULT_SERVER)
+    .action(async (options: ServerOptions) => {
+      outcome.exitCode = await runLogin(options.server, environment);
+    });
+
+  program
+    .command('logout')
+    .description('Remove the stored credential for a control plane.')
+    .option('--server <url>', 'control plane URL', DEFAULT_SERVER)
+    .action(async (options: ServerOptions) => {
+      outcome.exitCode = await runLogout(options.server, environment);
+    });
+
+  program
+    .command('link')
+    .description('Bind this checkout to a repository registered in your workspace.')
+    .argument('[repository-id]', 'repository ID shown on the repository page; omit to list')
+    .option('--server <url>', 'control plane URL', DEFAULT_SERVER)
+    .action(async (repositoryId: string | undefined, options: ServerOptions) => {
+      outcome.exitCode = await runLink(repositoryId, options.server, environment);
+    });
+
+  program
+    .command('sync')
+    .description('Deliver reports that could not be uploaded when their check ran.')
+    .action(async () => {
+      outcome.exitCode = await runSync(environment);
     });
 
   return program;

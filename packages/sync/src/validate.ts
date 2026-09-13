@@ -4,6 +4,7 @@ import {
   MIGRATION_EXECUTION_STAGES,
   REQUIREMENTS,
 } from '@assurance-compiler/core';
+import type { MigrationExecutionSubject } from '@assurance-compiler/core';
 import type { CloudRunEvent, CloudRunReport, CloudStage } from './report.js';
 import { CLOUD_REPORT_VERSION } from './report.js';
 
@@ -204,13 +205,7 @@ function readVerification(value: unknown): NonNullable<CloudRunReport['verificat
   };
 }
 
-function readSubject(
-  value: unknown,
-): CloudRunReport['verification'] extends infer V
-  ? V extends { subject: infer S }
-    ? S
-    : never
-  : never {
+function readSubject(value: unknown): MigrationExecutionSubject {
   const subject = object(value, 'subject', [
     'baseline',
     'candidate',
@@ -284,7 +279,7 @@ function text(value: unknown, max: number, name: string): string {
     throw new Invalid(`${name} must be a string of 1 to ${String(max)} characters`);
   }
   // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u0008\u000B-\u001F\u007F]/.test(value)) {
+  if (/[\u0000-\u001F\u007F]/.test(value)) {
     throw new Invalid(`${name} contains control characters`);
   }
   return value;

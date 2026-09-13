@@ -196,6 +196,14 @@ column names from data puts that data into evidence.
 - The Prisma CLI in `node_modules` is the repository's own code and is executed as such. Do not
   run `check` on repositories whose dependencies you do not trust.
 
+## Web control plane and `--sync`
+
+`apps/web` is the account-based web application: sign in, register a repository, authorize the
+CLI with `assure login`, bind a checkout with `assure link <repository-id>`, then run
+`assure check … --sync` to follow the run live and keep its evidence. Ordinary local checks need
+no account and send nothing. What `--sync` sends is an explicit, versioned allowlist
+(`packages/sync`); see [apps/web/README.md](apps/web/README.md) for setup and the data contract.
+
 ## `assure diff`
 
 Plans the requirements a change imposes without verifying anything. It always exits `0` when a
@@ -274,7 +282,9 @@ changes to this shape will increment `version`.
 packages/core     Domain model: surfaces, requirements, evidence, assessment, planner, JSON document
 packages/git      Change sets, trees and blobs, read with the git executable
 packages/prisma   Prisma change detector and the PostgreSQL migration-execution provider
-apps/cli          The assure command
+packages/sync     Cloud payload version 1: allowlist, projection, validation, hash
+apps/cli          The assure command, including login, link, sync and check --sync
+apps/web          Web control plane: Next.js, Better Auth, Drizzle on PostgreSQL
 fixtures/         Tiny repositories used by tests and demonstrations
 test/support      Shared test helpers
 docs/thesis.md    Why this exists
