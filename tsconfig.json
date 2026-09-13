@@ -9,11 +9,12 @@
     "customConditions": ["@assurance-compiler/source"]
   },
   "include": [
-    "apps/*/src",
-    "apps/*/test",
+    "apps/cli/src",
+    "apps/cli/test",
     "packages/*/src",
     "packages/*/test",
     "test",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "playwright.config.ts"
   ]
 }

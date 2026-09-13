@@ -4,7 +4,15 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', 'fixtures/**'],
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      'fixtures/**',
+      '**/.next/**',
+      '.claude/**',
+      'apps/web/drizzle/**',
+      'apps/web/next-env.d.ts',
+    ],
   },
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
@@ -24,7 +32,18 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.js'],
+    files: ['apps/web/**/*.{ts,tsx}'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    rules: {
+      // Event handler attributes may be async functions in React.
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+    },
+  },
+  {
+    files: ['**/*.{js,mjs}'],
     extends: [tseslint.configs.disableTypeChecked],
   },
 );

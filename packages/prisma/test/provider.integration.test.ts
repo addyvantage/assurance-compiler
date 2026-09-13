@@ -168,12 +168,17 @@ describe('verifyMigrationExecution with real PostgreSQL and Prisma', () => {
         ? { exitCode: undefined, output: '', notFound: true, timedOut: false, cancelled: false }
         : runTool(request);
 
-    const observation = await verifyMigrationExecution(root, inputs, { runTool: intercept });
+    const transitions: string[] = [];
+    const observation = await verifyMigrationExecution(root, inputs, {
+      runTool: intercept,
+      onStage: (record) => transitions.push(`${record.name}:${record.status}`),
+    });
 
     expect(observation.stages[0]).toMatchObject({
       status: 'failed',
       detail: 'initdb was not found on PATH.',
     });
+    expect(transitions).toEqual(['environment:running', 'environment:failed']);
     expect(observation.stages.slice(1).every((stage) => stage.status === 'pending')).toBe(true);
     expect(observation.cleanup).toEqual({ status: 'succeeded', leftovers: [] });
   });
