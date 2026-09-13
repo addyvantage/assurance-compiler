@@ -9,6 +9,10 @@ Assurance Compiler tells you whether the change received the verification it req
 
 The core abstraction is **CHANGE → REQUIREMENT → EVIDENCE**. See [docs/thesis.md](docs/thesis.md).
 
+Working in this repository: [AGENTS.md](AGENTS.md) routes tasks, [POLICY.md](POLICY.md) holds
+the rules, [CONTRIBUTING.md](CONTRIBUTING.md) the commands, and `docs/` the product context,
+architecture, design system and current status.
+
 | Change surface           | Detected from                                  | Requires                       |
 | ------------------------ | ---------------------------------------------- | ------------------------------ |
 | `DATABASE_SCHEMA_CHANGE` | `prisma/schema.prisma`, `prisma/migrations/**` | `NONEMPTY_MIGRATION_EXECUTION` |
@@ -277,7 +281,7 @@ packages/prisma   Prisma change detector and the PostgreSQL migration-execution 
 apps/cli          The assure command
 fixtures/         Tiny repositories used by tests and demonstrations
 test/support      Shared test helpers
-docs/thesis.md    Why this exists
+docs/             Thesis, product context, architecture, design system, project status
 ```
 
 ## Development
