@@ -1,15 +1,18 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { PageHeader } from '@/components/shell';
-import { explainReport } from '@/lib/explain';
-import { duration, short, when } from '@/lib/format';
-import { getRun } from '@/lib/runs';
+import { PageBody, PageHeading, Topbar } from '@/components/app/topbar';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatusIcon } from '@/components/ui/status';
+import { explainReport, STAGE_LABELS } from '@/lib/explain';
+import { formatMs, short, when } from '@/lib/format';
+import { getRun, requirementState } from '@/lib/runs';
 import { requireWorkspace } from '@/lib/session';
+import { runStatus } from '@/lib/status-kind';
+import { GitCompareArrows } from 'lucide-react';
+import { CompareTable, type CompareRow } from './compare-table';
 
 export const metadata: Metadata = { title: 'Compare runs' };
-
-type Row = readonly [label: string, left: string, right: string];
 
 export default async function ComparePage({
   params,
@@ -27,11 +30,24 @@ export default async function ComparePage({
     getRun(workspace.id, otherId),
   ]);
   if (left === undefined || right === undefined) notFound();
+  const crumbs = [
+    { label: 'Runs', href: '/runs' },
+    { label: id.slice(0, 8), href: `/runs/${id}`, mono: true },
+    { label: 'Compare' },
+  ];
   if (left.report === null || right.report === null) {
     return (
       <>
-        <PageHeader title="Compare runs" crumbs={[{ href: '/runs', label: 'Runs' }]} />
-        <p className="notice">Both runs need a final report before they can be compared.</p>
+        <Topbar crumbs={crumbs} />
+        <PageBody>
+          <div className="rounded-lg border border-line bg-raised shadow-raised">
+            <EmptyState
+              icon={<GitCompareArrows />}
+              title="Not ready to compare"
+              description="Both runs need their final report before they can be compared."
+            />
+          </div>
+        </PageBody>
       </>
     );
   }
@@ -40,108 +56,127 @@ export default async function ComparePage({
   const sa = a.verification?.subject;
   const sb = b.verification?.subject;
   const list = (items: readonly { name: string; blob: string }[] | undefined) =>
-    items === undefined ? '—' : items.map((m) => `${m.name} ${short(m.blob)}`).join(', ');
+    items === undefined || items.length === 0
+      ? 'None'
+      : items.map((m) => `${m.name} ${short(m.blob)}`).join('\n');
   const stages = (report: typeof a) =>
     report.verification === null
-      ? '—'
+      ? 'No stages ran'
       : report.verification.stages
           .map(
             (s) =>
-              `${s.name}: ${s.status}${s.durationMs === undefined ? '' : ` ${duration(s.durationMs)}`}`,
+              `${STAGE_LABELS[s.name]}: ${s.status}${s.durationMs === undefined ? '' : `, ${formatMs(s.durationMs)}`}`,
           )
           .join('\n');
-  const rows: readonly Row[] = [
-    ['Repository', left.repository.name, right.repository.name],
-    ['Started', when(a.startedAt), when(b.startedAt)],
-    ['Requested base', a.base.ref, b.base.ref],
-    ['Base tip', short(a.base.commit), short(b.base.commit)],
-    ['Merge base', short(a.mergeBase), short(b.mergeBase)],
-    ['Candidate', short(a.head.commit), short(b.head.commit)],
-    ['Verdict', a.verdict, b.verdict],
-    ['Requirement state', a.requirements[0]?.state ?? 'none', b.requirements[0]?.state ?? 'none'],
-    ['Explanation', explainReport(a).detail, explainReport(b).detail],
-    [
-      'Seed fixture',
-      sa === undefined ? '—' : `${sa.seed.path} ${short(sa.seed.blob)}`,
-      sb === undefined ? '—' : `${sb.seed.path} ${short(sb.seed.blob)}`,
-    ],
-    ['Baseline migrations', list(sa?.baselineMigrations), list(sb?.baselineMigrations)],
-    ['Candidate migrations', list(sa?.candidateMigrations), list(sb?.candidateMigrations)],
-    ['Expected tables', sa?.expectedTables.join(', ') ?? '—', sb?.expectedTables.join(', ') ?? '—'],
-    [
-      'PostgreSQL',
-      a.verification?.environment.postgres ?? '—',
-      b.verification?.environment.postgres ?? '—',
-    ],
-    [
-      'Prisma',
-      a.verification?.environment.prisma ?? '—',
-      b.verification?.environment.prisma ?? '—',
-    ],
-    [
-      'Provider',
-      a.verification === null
-        ? '—'
-        : `${a.verification.provider.id} ${a.verification.provider.version}`,
-      b.verification === null
-        ? '—'
-        : `${b.verification.provider.id} ${b.verification.provider.version}`,
-    ],
-    [
-      'Failure',
-      a.verification?.migrationFailure === undefined
-        ? '—'
-        : `${a.verification.migrationFailure.migration} SQLSTATE ${a.verification.migrationFailure.sqlState}`,
-      b.verification?.migrationFailure === undefined
-        ? '—'
-        : `${b.verification.migrationFailure.migration} SQLSTATE ${b.verification.migrationFailure.sqlState}`,
-    ],
-    ['Stages', stages(a), stages(b)],
-    ['Cloud report hash', left.run.reportHash ?? '—', right.run.reportHash ?? '—'],
+  const failure = (report: typeof a) =>
+    report.verification?.migrationFailure === undefined
+      ? 'None'
+      : `${report.verification.migrationFailure.migration}, SQLSTATE ${report.verification.migrationFailure.sqlState}`;
+  const rows: CompareRow[] = [
+    { label: 'Verdict', left: a.verdict, right: b.verdict },
+    {
+      label: 'Requirement state',
+      left: a.requirements[0]?.state ?? 'None',
+      right: b.requirements[0]?.state ?? 'None',
+    },
+    { label: 'Explanation', left: explainReport(a).detail, right: explainReport(b).detail },
+    { label: 'Requested base', left: a.base.ref, right: b.base.ref, mono: true },
+    { label: 'Base tip', left: short(a.base.commit), right: short(b.base.commit), mono: true },
+    { label: 'Merge base', left: short(a.mergeBase), right: short(b.mergeBase), mono: true },
+    { label: 'Candidate', left: short(a.head.commit), right: short(b.head.commit), mono: true },
+    {
+      label: 'Seed fixture',
+      left: sa === undefined ? 'None' : `${sa.seed.path} ${short(sa.seed.blob)}`,
+      right: sb === undefined ? 'None' : `${sb.seed.path} ${short(sb.seed.blob)}`,
+      mono: true,
+    },
+    {
+      label: 'Baseline migrations',
+      left: list(sa?.baselineMigrations),
+      right: list(sb?.baselineMigrations),
+      mono: true,
+    },
+    {
+      label: 'Candidate migrations',
+      left: list(sa?.candidateMigrations),
+      right: list(sb?.candidateMigrations),
+      mono: true,
+    },
+    {
+      label: 'Expected tables',
+      left: sa?.expectedTables.join(', ') ?? 'None',
+      right: sb?.expectedTables.join(', ') ?? 'None',
+      mono: true,
+    },
+    { label: 'Failure', left: failure(a), right: failure(b) },
+    { label: 'Stages', left: stages(a), right: stages(b) },
+    {
+      label: 'PostgreSQL',
+      left: a.verification?.environment.postgres ?? 'None',
+      right: b.verification?.environment.postgres ?? 'None',
+    },
+    {
+      label: 'Prisma',
+      left: a.verification?.environment.prisma ?? 'None',
+      right: b.verification?.environment.prisma ?? 'None',
+    },
+    {
+      label: 'Provider',
+      left:
+        a.verification === null
+          ? 'None'
+          : `${a.verification.provider.id} ${a.verification.provider.version}`,
+      right:
+        b.verification === null
+          ? 'None'
+          : `${b.verification.provider.id} ${b.verification.provider.version}`,
+    },
+    {
+      label: 'Cloud report hash',
+      left: left.run.reportHash ?? 'None',
+      right: right.run.reportHash ?? 'None',
+      mono: true,
+    },
   ];
-  const differing = rows.filter(([, x, y]) => x !== y).length;
+  const differing = rows.filter((row) => row.left !== row.right).length;
+  const card = (run: typeof left, title: string) => {
+    const status = runStatus(run.run.verdict, run.sync, requirementState(run.run));
+    return (
+      <Link
+        href={`/runs/${run.run.id}`}
+        className="flex items-center gap-3 rounded-lg border border-line bg-raised px-4 py-3 shadow-raised transition-colors hover:bg-hover"
+      >
+        <StatusIcon status={status.kind} size={18} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs text-ink-3">{title}</span>
+          <span className="block truncate text-sm font-medium text-ink">
+            {status.label}, candidate{' '}
+            <span className="font-mono text-[12.5px]">{short(run.run.headCommit)}</span>
+          </span>
+        </span>
+        <span className="text-xs whitespace-nowrap text-ink-3">{when(run.run.startedAt)}</span>
+      </Link>
+    );
+  };
 
   return (
     <>
-      <PageHeader
-        title="Compare runs"
-        description={`${String(differing)} of ${String(rows.length)} rows differ. Each run keeps its own evidence; a comparison never merges them.`}
-        crumbs={[{ href: '/runs', label: 'Runs' }]}
-      />
-      <div className="compare-grid">
-        <div className="head">Field</div>
-        <div className="head">
-          <Link href={`/runs/${left.run.id}`} className="mono">
-            {left.run.id.slice(0, 8)}
-          </Link>{' '}
-          (this run)
+      <Topbar crumbs={crumbs} />
+      <PageBody wide>
+        <PageHeading
+          title="Compare runs"
+          description={`${String(differing)} of ${String(rows.length)} fields differ. Each run keeps its own evidence; comparing never merges them.`}
+        />
+        <div className="mb-8 grid gap-3 md:grid-cols-2">
+          {card(left, 'This run')}
+          {card(right, 'Compared with')}
         </div>
-        <div className="head">
-          <Link href={`/runs/${right.run.id}`} className="mono">
-            {right.run.id.slice(0, 8)}
-          </Link>
-        </div>
-        {rows.map(([label, x, y]) => {
-          const diff = x !== y;
-          return (
-            <div key={label} style={{ display: 'contents' }}>
-              <div className="muted">{label}</div>
-              <div
-                className={diff ? 'diff' : ''}
-                style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-              >
-                {x}
-              </div>
-              <div
-                className={diff ? 'diff' : ''}
-                style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-              >
-                {y}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+        <CompareTable
+          rows={rows}
+          leftTitle={`Run ${left.run.id.slice(0, 8)}`}
+          rightTitle={`Run ${right.run.id.slice(0, 8)}`}
+        />
+      </PageBody>
     </>
   );
 }

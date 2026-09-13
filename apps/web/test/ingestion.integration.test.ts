@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { projectCheckDocument, reportHash, type CloudRunReport } from '@assurance-compiler/sync';
+import { GET as authGet, POST as authPost } from '../app/api/auth/[...all]/route';
 import { POST as link } from '../app/api/cli/link/route';
 import { POST as register } from '../app/api/cli/register/route';
 import { POST as postEvent } from '../app/api/cli/runs/[id]/events/route';
@@ -266,5 +267,23 @@ describe('CLI ingestion', () => {
     expect(syncState(base as never, new Date(now - 30_000), now)).toBe('live');
     expect(syncState(base as never, new Date(now - 10 * 60_000), now)).toBe('stale');
     expect(syncState({ ...base, status: 'reported' } as never, null, now)).toBe('reported');
+  });
+});
+
+describe('account endpoints', () => {
+  it('refuse a CLI token, except for signing that CLI out', async () => {
+    const actor = await createActor();
+    const session = await authGet(
+      new Request('http://localhost/api/auth/get-session', {
+        headers: { authorization: `Bearer ${actor.token}` },
+      }),
+    );
+    expect(session.status).toBe(403);
+    const approve = await authPost(
+      json('/api/auth/device/approve', { userCode: 'ABCDEFGH' }, actor.token),
+    );
+    expect(approve.status).toBe(403);
+    const signOut = await authPost(json('/api/auth/sign-out', {}, actor.token));
+    expect(signOut.status).toBe(200);
   });
 });

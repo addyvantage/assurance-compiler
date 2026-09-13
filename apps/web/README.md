@@ -3,7 +3,7 @@
 The account-based web application for Assurance Compiler: sign in, register a repository, link
 the CLI on your machine, run checks locally with `--sync`, follow them live in the browser, and
 keep every run's evidence. Next.js 16 (App Router, Node runtime), Better Auth, Drizzle ORM on
-PostgreSQL, authored CSS.
+PostgreSQL, Tailwind CSS 4 with Radix primitives, Motion, lucide icons, sonner toasts and a cmdk command menu.
 
 ## Run it locally
 

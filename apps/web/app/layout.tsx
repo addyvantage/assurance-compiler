@@ -1,20 +1,19 @@
 import type { Metadata } from 'next';
-import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
+import { Instrument_Sans, JetBrains_Mono } from 'next/font/google';
 import Script from 'next/script';
 import type { ReactNode } from 'react';
+import { Providers } from '@/components/app/providers';
 import './globals.css';
 
-const sans = IBM_Plex_Sans({
+const sans = Instrument_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-plex-sans',
+  variable: '--font-instrument',
   display: 'swap',
 });
 
-const mono = IBM_Plex_Mono({
+const mono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-plex-mono',
+  variable: '--font-jetbrains',
   display: 'swap',
 });
 
@@ -33,7 +32,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
         <Script id="assure-theme" strategy="beforeInteractive">
           {themeScript}
         </Script>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

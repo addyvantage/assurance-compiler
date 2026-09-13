@@ -1,62 +1,93 @@
 'use client';
 
+import { ChevronDown, FolderGit2, LoaderCircle } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useTransition } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Menu,
+  MenuContent,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from '@/components/ui/menu';
+import { Segmented } from '@/components/ui/segmented';
 
-/** Filters live in the URL so a filtered list can be reloaded and shared. */
+type Result = 'all' | 'FAILED' | 'INCOMPLETE' | 'COMPLETE' | 'running';
+
+const RESULTS: readonly { value: Result; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'FAILED', label: 'Failed' },
+  { value: 'INCOMPLETE', label: 'Incomplete' },
+  { value: 'COMPLETE', label: 'Complete' },
+  { value: 'running', label: 'Running' },
+];
+
+/** Filters live in the URL, so a filtered list survives reload and can be shared. */
 export function RunFilters({
   repositories,
+  repository,
+  result,
 }: {
   readonly repositories: readonly { readonly id: string; readonly name: string }[];
+  readonly repository: string;
+  readonly result: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const [pending, startTransition] = useTransition();
 
   function update(key: string, value: string) {
     const next = new URLSearchParams(params.toString());
-    if (value === '') next.delete(key);
+    if (value === 'all') next.delete(key);
     else next.set(key, value);
     const query = next.toString();
-    router.push(query === '' ? pathname : `${pathname}?${query}`);
+    startTransition(() => {
+      router.push(query === '' ? pathname : `${pathname}?${query}`, { scroll: false });
+    });
   }
 
+  const current = repositories.find((entry) => entry.id === repository);
+  const selected = RESULTS.some((entry) => entry.value === result) ? (result as Result) : 'all';
+
   return (
-    <div className="filters" role="group" aria-label="Filter runs">
-      <label className="sr-only" htmlFor="filter-repository">
-        Repository
-      </label>
-      <select
-        id="filter-repository"
-        className="select"
-        value={params.get('repository') ?? ''}
-        onChange={(event) => {
-          update('repository', event.target.value);
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <Segmented
+        label="Result"
+        options={RESULTS}
+        value={selected}
+        onChange={(value) => {
+          update('result', value);
         }}
-      >
-        <option value="">All repositories</option>
-        {repositories.map((repository) => (
-          <option key={repository.id} value={repository.id}>
-            {repository.name}
-          </option>
-        ))}
-      </select>
-      <label className="sr-only" htmlFor="filter-result">
-        Result
-      </label>
-      <select
-        id="filter-result"
-        className="select"
-        value={params.get('result') ?? ''}
-        onChange={(event) => {
-          update('result', event.target.value);
-        }}
-      >
-        <option value="">Any result</option>
-        <option value="FAILED">Failed</option>
-        <option value="COMPLETE">Complete</option>
-        <option value="INCOMPLETE">Incomplete</option>
-        <option value="running">Still running</option>
-      </select>
+      />
+      <Menu>
+        <MenuTrigger asChild>
+          <Button aria-label={`Repository: ${current?.name ?? 'all repositories'}`}>
+            <FolderGit2 className="text-ink-3" />
+            <span className="max-w-[180px] truncate">{current?.name ?? 'All repositories'}</span>
+            <ChevronDown className="text-ink-3" />
+          </Button>
+        </MenuTrigger>
+        <MenuContent>
+          <MenuRadioGroup
+            value={current === undefined ? 'all' : current.id}
+            onValueChange={(value) => {
+              update('repository', value);
+            }}
+          >
+            <MenuRadioItem value="all">All repositories</MenuRadioItem>
+            {repositories.map((entry) => (
+              <MenuRadioItem key={entry.id} value={entry.id}>
+                <span className="truncate">{entry.name}</span>
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>
+      {pending ? (
+        <LoaderCircle className="size-4 animate-spin text-ink-3" aria-label="Updating" />
+      ) : null}
     </div>
   );
 }

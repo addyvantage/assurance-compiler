@@ -1,181 +1,194 @@
 import { desc, eq } from 'drizzle-orm';
+import { Check, CircleSlash, Laptop } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { PageHeader } from '@/components/shell';
+import type { ReactNode } from 'react';
+import { PageBody, PageHeading, Topbar } from '@/components/app/topbar';
 import { db, schema } from '@/lib/db';
+import { NEVER_SENT, SENT } from '@/lib/disclosure';
 import { ago, when } from '@/lib/format';
 import { requireWorkspace } from '@/lib/session';
-import { renameWorkspace, revokeCliSession, unlinkRepository } from './actions';
-import { ThemePicker } from './theme-picker';
+import { RevokeCliButton, ThemeControl, UnlinkButton, WorkspaceNameForm } from './controls';
 
 export const metadata: Metadata = { title: 'Settings' };
 
 export default async function SettingsPage() {
   const { workspace, user } = await requireWorkspace();
-  const clis = await db
-    .select()
-    .from(schema.cliSession)
-    .where(eq(schema.cliSession.workspaceId, workspace.id))
-    .orderBy(desc(schema.cliSession.createdAt));
-  const links = await db
-    .select({ link: schema.cliLink, repository: schema.repository, cli: schema.cliSession })
-    .from(schema.cliLink)
-    .innerJoin(schema.repository, eq(schema.repository.id, schema.cliLink.repositoryId))
-    .innerJoin(schema.cliSession, eq(schema.cliSession.id, schema.cliLink.cliSessionId))
-    .where(eq(schema.cliLink.workspaceId, workspace.id))
-    .orderBy(desc(schema.cliLink.linkedAt));
+  const [clis, links] = await Promise.all([
+    db
+      .select()
+      .from(schema.cliSession)
+      .where(eq(schema.cliSession.workspaceId, workspace.id))
+      .orderBy(desc(schema.cliSession.createdAt)),
+    db
+      .select({ link: schema.cliLink, repository: schema.repository, cli: schema.cliSession })
+      .from(schema.cliLink)
+      .innerJoin(schema.repository, eq(schema.repository.id, schema.cliLink.repositoryId))
+      .innerJoin(schema.cliSession, eq(schema.cliSession.id, schema.cliLink.cliSessionId))
+      .where(eq(schema.cliLink.workspaceId, workspace.id))
+      .orderBy(desc(schema.cliLink.linkedAt)),
+  ]);
 
   return (
     <>
-      <PageHeader title="Settings" description={`Signed in as ${user.email}.`} />
+      <Topbar crumbs={[{ label: 'Settings' }]} />
+      <PageBody>
+        <PageHeading title="Settings" description={`Signed in as ${user.email}.`} />
 
-      <section className="section" aria-labelledby="ws-heading">
-        <div className="section-title">
-          <h2 id="ws-heading">Workspace</h2>
-        </div>
-        <form action={renameWorkspace}>
-          <div className="field">
-            <label htmlFor="ws-name">Name</label>
-            <input
-              id="ws-name"
-              name="name"
-              className="input"
-              defaultValue={workspace.name}
-              maxLength={80}
-              required
-            />
-            <span className="hint">
-              Your account owns this workspace. Invitations and roles are not part of this release.
-            </span>
-          </div>
-          <button type="submit" className="button">
-            Save name
-          </button>
-        </form>
-      </section>
+        <Section
+          title="Workspace"
+          description="Your account owns this workspace. Invitations and roles are not part of this release."
+        >
+          <WorkspaceNameForm name={workspace.name} />
+        </Section>
 
-      <section className="section" aria-labelledby="theme-heading">
-        <div className="section-title">
-          <h2 id="theme-heading">Appearance</h2>
-        </div>
-        <ThemePicker />
-      </section>
+        <Section
+          title="Appearance"
+          description="Saved in this browser. System follows your operating system."
+        >
+          <ThemeControl />
+        </Section>
 
-      <section className="section" aria-labelledby="cli-heading">
-        <div className="section-title">
-          <h2 id="cli-heading">Authorized CLIs</h2>
-        </div>
-        {clis.length === 0 ? (
-          <p className="muted">No CLI has signed in yet. Start from a repository page.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Machine</th>
-                  <th>CLI</th>
-                  <th>Authorized</th>
-                  <th>Last used</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {clis.map((cli) => (
-                  <tr key={cli.id}>
-                    <td className="mono">{cli.label}</td>
-                    <td>assure {cli.cliVersion}</td>
-                    <td className="muted" title={cli.createdAt.toISOString()}>
-                      {when(cli.createdAt)}
-                    </td>
-                    <td className="muted">
-                      {cli.revokedAt === null
-                        ? ago(cli.lastUsedAt)
-                        : `revoked ${when(cli.revokedAt)}`}
-                    </td>
-                    <td className="num">
-                      {cli.revokedAt === null ? (
-                        <form action={revokeCliSession}>
-                          <input type="hidden" name="id" value={cli.id} />
-                          <button type="submit" className="button small danger">
-                            Revoke
-                          </button>
-                        </form>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="faint" style={{ marginTop: 8 }}>
-          Revoking ends that CLI&apos;s credential immediately. Runs it already reported stay in
-          history, marked with its name.
-        </p>
-      </section>
-
-      <section className="section" aria-labelledby="links-heading">
-        <div className="section-title">
-          <h2 id="links-heading">Linked repositories</h2>
-        </div>
-        {links.length === 0 ? (
-          <p className="muted">No repository is linked to a CLI yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Repository</th>
-                  <th>CLI</th>
-                  <th>Linked</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {links.map(({ link, repository, cli }) => (
-                  <tr key={`${cli.id}:${repository.id}`}>
-                    <td>
-                      <Link href={`/repositories/${repository.id}`}>{repository.name}</Link>
-                    </td>
-                    <td className="mono">
+        <Section
+          title="Authorized CLIs"
+          description="Machines signed in with assure login. Revoking ends a credential immediately; runs it reported stay in history."
+        >
+          {clis.length === 0 ? (
+            <Empty>No CLI has signed in yet. Start from a repository page.</Empty>
+          ) : (
+            <List>
+              {clis.map((cli) => (
+                <li key={cli.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+                  <Laptop className="size-4 shrink-0 text-ink-3" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[12.5px] text-ink">
                       {cli.label}
-                      {cli.revokedAt === null ? '' : ' (revoked)'}
-                    </td>
-                    <td className="muted" title={link.linkedAt.toISOString()}>
-                      {when(link.linkedAt)}
-                    </td>
-                    <td className="num">
-                      <form action={unlinkRepository}>
-                        <input type="hidden" name="cliSessionId" value={cli.id} />
-                        <input type="hidden" name="repositoryId" value={repository.id} />
-                        <button type="submit" className="button small">
-                          Unlink
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                    </span>
+                    <span className="block text-xs text-ink-3">
+                      assure {cli.cliVersion}, authorized {when(cli.createdAt)}
+                    </span>
+                  </span>
+                  {cli.revokedAt === null ? (
+                    <>
+                      <span className="text-xs text-ink-3">used {ago(cli.lastUsedAt)}</span>
+                      <RevokeCliButton id={cli.id} label={cli.label} />
+                    </>
+                  ) : (
+                    <span className="rounded-full bg-hover px-2 py-0.5 text-xs text-ink-2">
+                      Revoked {when(cli.revokedAt)}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </List>
+          )}
+        </Section>
 
-      <section className="section" aria-labelledby="data-heading">
-        <div className="section-title">
-          <h2 id="data-heading">What synchronization sends</h2>
-        </div>
-        <p className="muted" style={{ maxWidth: '72ch' }}>
-          Only when you pass <code>--sync</code>, and only for a linked repository: run and
-          repository IDs, commit and Git blob IDs, the requested branch name, requirement and
-          provider IDs, stage statuses and timings, PostgreSQL and Prisma versions, SQLSTATE codes,
-          cleanup status, the seed fixture path, migration names, expected table names, and changed
-          file paths the detector recognized. Branch names, paths and identifiers can themselves be
-          sensitive; this is not a zero-data upload. Never sent: database messages, stage details,
-          tool output, SQL, seed contents, source files, row values, local paths, credentials or
-          stack traces. The complete evidence file stays local.
-        </p>
-      </section>
+        <Section
+          title="Linked repositories"
+          description="Which CLI may report runs for which repository."
+        >
+          {links.length === 0 ? (
+            <Empty>No repository is linked to a CLI yet.</Empty>
+          ) : (
+            <List>
+              {links.map(({ link, repository, cli }) => (
+                <li
+                  key={`${cli.id}:${repository.id}`}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3"
+                >
+                  <span className="min-w-0 flex-1">
+                    <Link
+                      href={`/repositories/${repository.id}`}
+                      className="block truncate text-sm font-medium hover:underline"
+                    >
+                      {repository.name}
+                    </Link>
+                    <span className="block truncate text-xs text-ink-3">
+                      from <span className="font-mono">{cli.label}</span>
+                      {cli.revokedAt === null ? '' : ' (revoked)'}, linked {when(link.linkedAt)}
+                    </span>
+                  </span>
+                  <UnlinkButton
+                    cliSessionId={cli.id}
+                    repositoryId={repository.id}
+                    name={repository.name}
+                  />
+                </li>
+              ))}
+            </List>
+          )}
+        </Section>
+
+        <Section
+          title="What synchronization sends"
+          description="Only with --sync, and only for a linked repository. Names and paths can be sensitive; this is not a zero-data upload."
+        >
+          <div className="grid overflow-hidden rounded-lg border border-line bg-raised shadow-raised sm:grid-cols-2">
+            <div className="border-b border-line p-4 sm:border-r sm:border-b-0">
+              <h3 className="mb-2.5 text-xs font-medium text-ink-2">Sent</h3>
+              <ul className="grid gap-2">
+                {SENT.map((line) => (
+                  <li key={line} className="flex gap-2.5 text-sm text-ink">
+                    <Check className="mt-0.5 size-4 shrink-0 text-ink-3" />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="p-4">
+              <h3 className="mb-2.5 text-xs font-medium text-ink-2">Never sent</h3>
+              <ul className="grid gap-2">
+                {NEVER_SENT.map((line) => (
+                  <li key={line} className="flex gap-2.5 text-sm text-ink">
+                    <CircleSlash className="mt-0.5 size-4 shrink-0 text-ink-3" />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-xs text-ink-3">
+                The complete evidence file stays on the machine that ran the check.
+              </p>
+            </div>
+          </div>
+        </Section>
+      </PageBody>
     </>
+  );
+}
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  readonly title: string;
+  readonly description: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <section className="grid gap-4 border-t border-line py-8 first-of-type:border-t-0 first-of-type:pt-0 md:grid-cols-[232px_minmax(0,1fr)] md:gap-10">
+      <div>
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <p className="mt-1 text-sm text-ink-2">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  );
+}
+
+function List({ children }: { readonly children: ReactNode }) {
+  return (
+    <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-raised shadow-raised">
+      {children}
+    </ul>
+  );
+}
+
+function Empty({ children }: { readonly children: ReactNode }) {
+  return (
+    <p className="rounded-lg border border-line bg-raised px-4 py-5 text-sm text-ink-2 shadow-raised">
+      {children}
+    </p>
   );
 }

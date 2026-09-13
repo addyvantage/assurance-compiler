@@ -1,12 +1,18 @@
 'use client';
 
+import { LoaderCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Field, FormError, Input } from '@/components/ui/field';
 import { authClient } from '@/lib/auth-client';
+
+type Mode = 'sign-in' | 'create';
 
 export function SignInForm({ next }: { readonly next: string }) {
   const router = useRouter();
-  const [mode, setMode] = useState<'sign-in' | 'create'>('sign-in');
+  const [mode, setMode] = useState<Mode>('sign-in');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,77 +41,76 @@ export function SignInForm({ next }: { readonly next: string }) {
   }
 
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit(new FormData(event.currentTarget));
-      }}
-      aria-describedby={error === null ? undefined : 'auth-error'}
-    >
-      <h1>{mode === 'create' ? 'Create your account' : 'Sign in'}</h1>
-      <p className="muted" style={{ marginBottom: 16 }}>
+    <div>
+      <h1 className="text-xl font-semibold tracking-[-0.02em]">
+        {mode === 'create' ? 'Create your account' : 'Sign in'}
+      </h1>
+      <p className="mt-1.5 text-sm text-ink-2">
         {mode === 'create'
-          ? 'A personal workspace is created for you. Nothing is sent anywhere until you link a repository and run a check with --sync.'
-          : 'Your account owns one personal workspace with its repositories and run history.'}
+          ? 'You get a personal workspace. Nothing leaves your machine until you link a repository and run a check with --sync.'
+          : 'Your workspace keeps repositories, linked CLIs and run history.'}
       </p>
-      {error !== null ? (
-        <p id="auth-error" className="form-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {mode === 'create' ? (
-        <div className="field">
-          <label htmlFor="name">Name</label>
-          <input
-            id="name"
-            name="name"
-            className="input"
-            autoComplete="name"
+      <form
+        className="mt-7 grid gap-4"
+        aria-describedby={error === null ? undefined : 'auth-error'}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit(new FormData(event.currentTarget));
+        }}
+      >
+        {error === null ? null : <FormError id="auth-error">{error}</FormError>}
+        <AnimatePresence initial={false}>
+          {mode === 'create' ? (
+            <motion.div
+              key="name"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="-m-1 overflow-hidden p-1"
+            >
+              <Field label="Name" htmlFor="name">
+                <Input id="name" name="name" autoComplete="name" required maxLength={80} />
+              </Field>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        <Field label="Email" htmlFor="email">
+          <Input id="email" name="email" type="email" autoComplete="email" required />
+        </Field>
+        <Field
+          label="Password"
+          htmlFor="password"
+          hint={mode === 'create' ? 'At least 12 characters.' : undefined}
+        >
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
             required
-            maxLength={80}
+            minLength={12}
           />
-        </div>
-      ) : null}
-      <div className="field">
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          className="input"
-          autoComplete="email"
-          required
-        />
-      </div>
-      <div className="field">
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          className="input"
-          autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
-          required
-          minLength={12}
-        />
-        {mode === 'create' ? <span className="hint">At least 12 characters.</span> : null}
-      </div>
-      <div className="form-actions">
-        <button type="submit" className="button primary" disabled={busy}>
-          {busy ? 'Working' : mode === 'create' ? 'Create account' : 'Sign in'}
-        </button>
+        </Field>
+        <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" disabled={busy}>
+          {busy ? <LoaderCircle className="animate-spin" /> : null}
+          {mode === 'create' ? 'Create account' : 'Sign in'}
+        </Button>
+      </form>
+      <p className="mt-5 text-sm text-ink-2">
+        {mode === 'create' ? 'Already have an account? ' : 'New to Assurance Compiler? '}
         <button
           type="button"
-          className="button"
+          className="rounded-[4px] font-medium text-accent-ink hover:underline"
           onClick={() => {
             setMode(mode === 'create' ? 'sign-in' : 'create');
             setError(null);
           }}
         >
-          {mode === 'create' ? 'I have an account' : 'Create an account'}
+          {mode === 'create' ? 'Sign in' : 'Create an account'}
         </button>
-      </div>
-    </form>
+      </p>
+    </div>
   );
 }
 

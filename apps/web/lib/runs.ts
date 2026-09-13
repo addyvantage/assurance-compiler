@@ -1,3 +1,4 @@
+import type { AssuranceState } from '@assurance-compiler/core';
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import {
   parseCloudRunReport,
@@ -31,6 +32,12 @@ export function reportOf(run: RunRow): CloudRunReport | null {
   const parsed = parseCloudRunReport(run.report);
   // Stored reports were validated on ingress; a failure here means the stored row was edited.
   return parsed.ok ? parsed.value : null;
+}
+
+/** The reported requirement state, `NONE` when nothing applied, `null` before the report. */
+export function requirementState(run: RunRow): AssuranceState | 'NONE' | null {
+  const report = reportOf(run);
+  return report === null ? null : (report.requirements[0]?.state ?? 'NONE');
 }
 
 export interface RunFilters {
@@ -85,6 +92,22 @@ export async function listEvents(runId: string, after: number): Promise<RunEvent
     .from(schema.runEvent)
     .where(and(eq(schema.runEvent.runId, runId), gt(schema.runEvent.sequence, after)))
     .orderBy(schema.runEvent.sequence);
+}
+
+/** The most recent run of each repository in the workspace, keyed by repository ID. */
+export async function latestRunByRepository(workspaceId: string) {
+  const rows = await db
+    .selectDistinctOn([schema.run.repositoryId])
+    .from(schema.run)
+    .where(eq(schema.run.workspaceId, workspaceId))
+    .orderBy(schema.run.repositoryId, desc(schema.run.startedAt));
+  const latest = await latestEventTimes(rows.map((run) => run.id));
+  return new Map(
+    rows.map((run) => [
+      run.repositoryId,
+      { run, sync: syncState(run, latest.get(run.id) ?? null) },
+    ]),
+  );
 }
 
 async function latestEventTimes(runIds: readonly string[]): Promise<Map<string, Date>> {

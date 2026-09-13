@@ -16,7 +16,11 @@ interface SessionUser {
 
 /** The browser session, or `null`. Reads cookies from the current request. */
 export async function currentSession() {
-  return auth.api.getSession({ headers: await headers() });
+  const requestHeaders = await headers();
+  // A CLI token is for the CLI routes. Pages, server actions, streams and downloads need the
+  // browser's cookie session, so a bearer token never signs in here.
+  if ((requestHeaders.get('authorization') ?? '').startsWith('Bearer ')) return null;
+  return auth.api.getSession({ headers: requestHeaders });
 }
 
 /**
