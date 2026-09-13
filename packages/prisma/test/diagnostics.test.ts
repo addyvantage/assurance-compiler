@@ -69,6 +69,42 @@ describe('parseMigrateDeployOutput', () => {
     expect(parseMigrateDeployOutput(output).databaseError).toEqual({ sqlState: '22P02' });
   });
 
+  it('drops a message the migration raised itself, whatever SQLSTATE it chose', () => {
+    const output = P3018_OUTPUT.replace(
+      'Database error code: 23502',
+      'Database error code: 23505',
+    ).replace(
+      'ERROR: column "age" of relation "User" contains null values',
+      'ERROR: cannot migrate: ada@example.com, grace@example.com',
+    );
+
+    expect(parseMigrateDeployOutput(output).databaseError).toEqual({ sqlState: '23505' });
+  });
+
+  it('drops a known shape whose identifier slot exceeds the PostgreSQL identifier limit', () => {
+    const output = P3018_OUTPUT.replace(
+      'Database error code: 23502',
+      'Database error code: 42P01',
+    ).replace(
+      'ERROR: column "age" of relation "User" contains null values',
+      `ERROR: relation "${'ada@example.com, '.repeat(5)}" does not exist`,
+    );
+
+    expect(parseMigrateDeployOutput(output).databaseError).toEqual({ sqlState: '42P01' });
+  });
+
+  it('drops syntax errors, which quote SQL', () => {
+    const output = P3018_OUTPUT.replace(
+      'Database error code: 23502',
+      'Database error code: 42601',
+    ).replace(
+      'ERROR: column "age" of relation "User" contains null values',
+      'ERROR: syntax error at or near "RETURNIN"',
+    );
+
+    expect(parseMigrateDeployOutput(output).databaseError).toEqual({ sqlState: '42601' });
+  });
+
   it('reports no database error for connection failures', () => {
     const output = "Error: P1001: Can't reach database server at `127.0.0.1:1`\n";
 

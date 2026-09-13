@@ -205,6 +205,17 @@ describe('assessMigrationExecution', () => {
     });
   });
 
+  it('cannot prove a change that names no expected table', () => {
+    const withoutTables = { ...subject, expectedTables: [] };
+
+    expect(
+      assessMigrationExecution(
+        withoutTables,
+        observation({ subject: withoutTables, populatedTables: [] }),
+      ).state,
+    ).toBe('NOT_PROVEN');
+  });
+
   it('cannot prove a change that adds no candidate migration', () => {
     const withoutCandidates = { ...subject, candidateMigrations: [] };
 
